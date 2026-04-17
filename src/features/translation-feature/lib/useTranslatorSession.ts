@@ -1,4 +1,4 @@
-import { useReducer, useCallback } from 'react';
+import { useReducer, useCallback, useEffect, useRef } from 'react';
 import type {
   TranslatorSessionState,
   TranslatorAction,
@@ -6,6 +6,11 @@ import type {
   Utterance,
 } from '../../../lib/types';
 import { loadPersistedLanguages, persistLanguage } from './languages';
+import {
+  startAudioCapture,
+  type AudioCaptureHandle,
+  type AudioCaptureCallbacks,
+} from './audioCapture';
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
 
@@ -59,7 +64,6 @@ function reducer(
 
     // Transcript management
     case 'ADD_PARTIAL_TRANSCRIPT': {
-      // Replace existing partial from same speaker, or append
       const rest = state.utterances.filter(
         (u) => !(u.isPartial && u.speakerSide === action.payload.speakerSide),
       );
@@ -70,7 +74,6 @@ function reducer(
       };
     }
     case 'FINALIZE_UTTERANCE': {
-      // Replace any partial from same speaker with the finalized version
       const rest = state.utterances.filter(
         (u) => !(u.isPartial && u.speakerSide === action.payload.speakerSide),
       );
@@ -110,29 +113,57 @@ function buildInitialState(): TranslatorSessionState {
 export function useTranslatorSession() {
   const [state, dispatch] = useReducer(reducer, undefined, buildInitialState);
 
-  // Language
+  /** Active audio capture handle — null when not capturing */
+  const captureRef = useRef<AudioCaptureHandle | null>(null);
+
+  /**
+   * PCM data listener.  Future pipeline stages (VAD, ASR) will replace this
+   * ref with their own handler.  For now it is a no-op.
+   */
+  const pcmListenerRef = useRef<AudioCaptureCallbacks['onPCMData']>(() => undefined);
+
+  // Clean up capture on unmount
+  useEffect(() => {
+    return () => {
+      captureRef.current?.stop();
+      captureRef.current = null;
+    };
+  }, []);
+
+  // ── Language ────────────────────────────────────────────────────────────────
+
   const setLang = useCallback((side: 'left' | 'right', lang: Language) => {
     persistLanguage(side, lang);
     dispatch({ type: 'SET_LANG', payload: { side, lang } });
   }, []);
 
-  // Model lifecycle
+  // ── Model lifecycle ─────────────────────────────────────────────────────────
+
   const modelLoading = useCallback((progress?: number) => {
-    dispatch({ type: 'MODEL_LOADING', payload: progress !== undefined ? { progress } : undefined });
+    dispatch({
+      type: 'MODEL_LOADING',
+      payload: progress !== undefined ? { progress } : undefined,
+    });
   }, []);
   const modelReady = useCallback(() => dispatch({ type: 'MODEL_READY' }), []);
-  const modelError = useCallback((msg: string) => dispatch({ type: 'MODEL_ERROR', payload: msg }), []);
+  const modelError = useCallback(
+    (msg: string) => dispatch({ type: 'MODEL_ERROR', payload: msg }),
+    [],
+  );
 
-  // Mic lifecycle
+  // ── Mic lifecycle (exposed for external callers) ────────────────────────────
+
   const micRequest = useCallback(() => dispatch({ type: 'MIC_REQUEST' }), []);
   const micGranted = useCallback(() => dispatch({ type: 'MIC_GRANTED' }), []);
   const micDenied = useCallback(() => dispatch({ type: 'MIC_DENIED' }), []);
 
-  // Session lifecycle
+  // ── Session lifecycle ───────────────────────────────────────────────────────
+
   const startListening = useCallback(() => dispatch({ type: 'START_LISTENING' }), []);
   const stopListening = useCallback(() => dispatch({ type: 'STOP_LISTENING' }), []);
 
-  // Transcripts
+  // ── Transcripts ─────────────────────────────────────────────────────────────
+
   const addPartialTranscript = useCallback((utterance: Utterance) => {
     dispatch({ type: 'ADD_PARTIAL_TRANSCRIPT', payload: utterance });
   }, []);
@@ -140,26 +171,67 @@ export function useTranslatorSession() {
     dispatch({ type: 'FINALIZE_UTTERANCE', payload: utterance });
   }, []);
 
-  // Error
+  // ── Error ───────────────────────────────────────────────────────────────────
+
   const setError = useCallback((msg: string) => {
     dispatch({ type: 'SET_ERROR', payload: msg });
   }, []);
 
-  // High-level toggle: drives the MIC_REQUEST → MIC_GRANTED → START_LISTENING flow
-  // (actual mic acquisition happens in the audio pipeline, not here)
+  // ── Internal capture start/stop ─────────────────────────────────────────────
+
+  const _doStartCapture = useCallback(async () => {
+    dispatch({ type: 'MIC_REQUEST' });
+    try {
+      const handle = await startAudioCapture({
+        onPCMData: (samples) => {
+          // Delegate to whatever pipeline stage is currently registered.
+          // Step 3: no-op.  Step 4 (VAD) will replace pcmListenerRef.current.
+          pcmListenerRef.current(samples);
+        },
+        onError: (err) => {
+          dispatch({ type: 'SET_ERROR', payload: err.message });
+        },
+      });
+      captureRef.current = handle;
+      dispatch({ type: 'MIC_GRANTED' });
+      dispatch({ type: 'START_LISTENING' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isDenied =
+        msg.toLowerCase().includes('denied') ||
+        msg.toLowerCase().includes('notallowed') ||
+        msg.toLowerCase().includes('permission');
+      if (isDenied) {
+        dispatch({ type: 'MIC_DENIED' });
+      } else {
+        dispatch({ type: 'SET_ERROR', payload: msg });
+      }
+    }
+  }, []);
+
+  const _doStopCapture = useCallback(() => {
+    captureRef.current?.stop();
+    captureRef.current = null;
+    dispatch({ type: 'STOP_LISTENING' });
+  }, []);
+
+  // ── High-level toggle (drives BigMicButton) ─────────────────────────────────
+
   const toggleSession = useCallback(() => {
-    const { sessionStatus, micStatus, modelStatus } = state;
+    const { sessionStatus, modelStatus } = state;
     if (modelStatus !== 'ready') return;
     if (sessionStatus === 'listening' || sessionStatus === 'processing') {
-      dispatch({ type: 'STOP_LISTENING' });
-    } else if (sessionStatus === 'idle' && micStatus !== 'requesting') {
-      dispatch({ type: 'MIC_REQUEST' });
+      _doStopCapture();
+    } else if (sessionStatus === 'idle') {
+      void _doStartCapture();
     }
-  }, [state]);
+  }, [state, _doStartCapture, _doStopCapture]);
 
   return {
     state,
     dispatch,
+    /** Replace this ref's current value to intercept raw PCM data (used by VAD). */
+    pcmListenerRef,
     // Language
     setLang,
     // Model
