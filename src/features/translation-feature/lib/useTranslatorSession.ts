@@ -11,6 +11,7 @@ import {
   type AudioCaptureHandle,
   type AudioCaptureCallbacks,
 } from './audioCapture';
+import { createVAD, type VadHandle } from './vad';
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
 
@@ -19,13 +20,11 @@ function reducer(
   action: TranslatorAction,
 ): TranslatorSessionState {
   switch (action.type) {
-    // Language selection
     case 'SET_LANG':
       return action.payload.side === 'left'
         ? { ...state, leftLang: action.payload.lang }
         : { ...state, rightLang: action.payload.lang };
 
-    // Model lifecycle
     case 'MODEL_LOADING':
       return {
         ...state,
@@ -38,7 +37,6 @@ function reducer(
     case 'MODEL_ERROR':
       return { ...state, modelStatus: 'error', error: action.payload };
 
-    // Mic lifecycle
     case 'MIC_REQUEST':
       return { ...state, micStatus: 'requesting', error: null };
     case 'MIC_GRANTED':
@@ -51,7 +49,6 @@ function reducer(
         error: 'Microphone access was denied. Please allow microphone access and try again.',
       };
 
-    // Session lifecycle
     case 'START_LISTENING':
       return { ...state, sessionStatus: 'listening', error: null };
     case 'STOP_LISTENING':
@@ -62,7 +59,6 @@ function reducer(
         error: null,
       };
 
-    // Transcript management
     case 'ADD_PARTIAL_TRANSCRIPT': {
       const rest = state.utterances.filter(
         (u) => !(u.isPartial && u.speakerSide === action.payload.speakerSide),
@@ -83,7 +79,6 @@ function reducer(
       };
     }
 
-    // Error
     case 'SET_ERROR':
       return { ...state, sessionStatus: 'error', error: action.payload };
 
@@ -108,25 +103,61 @@ function buildInitialState(): TranslatorSessionState {
   };
 }
 
+// ─── Types for pipeline hooks ─────────────────────────────────────────────────
+
+/**
+ * Called by VAD when a complete utterance has been segmented.
+ * Step 5 (ASR) will replace the default no-op with its own handler.
+ *
+ * @param audio        - 16 kHz mono PCM for the entire utterance
+ * @param utteranceId  - pre-assigned ID to match partial → final states
+ * @param forcedSplit  - true when the 12 s cap triggered segmentation
+ */
+export type SpeechEndCallback = (
+  audio: Float32Array,
+  utteranceId: string,
+  forcedSplit: boolean,
+) => void;
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useTranslatorSession() {
   const [state, dispatch] = useReducer(reducer, undefined, buildInitialState);
 
-  /** Active audio capture handle — null when not capturing */
+  /** Active audio capture handle */
   const captureRef = useRef<AudioCaptureHandle | null>(null);
 
+  /** Active VAD instance */
+  const vadRef = useRef<VadHandle | null>(null);
+
   /**
-   * PCM data listener.  Future pipeline stages (VAD, ASR) will replace this
-   * ref with their own handler.  For now it is a no-op.
+   * Raw PCM listener registered with audioCapture.
+   * Replaced with vad.processChunk on start, reset to no-op on stop.
    */
   const pcmListenerRef = useRef<AudioCaptureCallbacks['onPCMData']>(() => undefined);
 
-  // Clean up capture on unmount
+  /**
+   * Speech-end callback for the ASR pipeline.
+   * Step 5 will replace pcmListenerRef.current is used internally;
+   * this ref is the ASR integration point.
+   */
+  const speechEndCallbackRef = useRef<SpeechEndCallback>(() => undefined);
+
+  /**
+   * Holds the current session state in a ref so async callbacks can
+   * read it without closing over a stale value.
+   */
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // Clean up on unmount
   useEffect(() => {
     return () => {
       captureRef.current?.stop();
       captureRef.current = null;
+      vadRef.current?.reset();
+      vadRef.current = null;
+      pcmListenerRef.current = () => undefined;
     };
   }, []);
 
@@ -151,7 +182,7 @@ export function useTranslatorSession() {
     [],
   );
 
-  // ── Mic lifecycle (exposed for external callers) ────────────────────────────
+  // ── Mic lifecycle ───────────────────────────────────────────────────────────
 
   const micRequest = useCallback(() => dispatch({ type: 'MIC_REQUEST' }), []);
   const micGranted = useCallback(() => dispatch({ type: 'MIC_GRANTED' }), []);
@@ -177,21 +208,56 @@ export function useTranslatorSession() {
     dispatch({ type: 'SET_ERROR', payload: msg });
   }, []);
 
-  // ── Internal capture start/stop ─────────────────────────────────────────────
+  // ── VAD + capture start ─────────────────────────────────────────────────────
 
   const _doStartCapture = useCallback(async () => {
     dispatch({ type: 'MIC_REQUEST' });
     try {
-      const handle = await startAudioCapture({
-        onPCMData: (samples) => {
-          // Delegate to whatever pipeline stage is currently registered.
-          // Step 3: no-op.  Step 4 (VAD) will replace pcmListenerRef.current.
-          pcmListenerRef.current(samples);
+      // Build the VAD — callbacks close over dispatch and stateRef
+      const vad = createVAD({
+        onSpeechStart: () => {
+          // Optional: could update UI to show "speech detected" indicator
         },
+
+        onSpeechEnd: (audio, forcedSplit) => {
+          const { leftLang, rightLang } = stateRef.current;
+          const utteranceId = crypto.randomUUID();
+
+          // Show a placeholder partial utterance immediately in the transcript
+          // (speaker side will be assigned by speakerHeuristics in step 5;
+          //  sourceText will be replaced by ASR output)
+          dispatch({
+            type: 'ADD_PARTIAL_TRANSCRIPT',
+            payload: {
+              id: utteranceId,
+              timestampStart: Date.now(),
+              speakerSide: 'unknown',
+              sourceLang: leftLang.code,
+              targetLang: rightLang.code,
+              sourceText: '…',
+              isPartial: true,
+            } satisfies Utterance,
+          });
+
+          // Hand audio to the ASR pipeline (step 5 wires this ref)
+          speechEndCallbackRef.current(audio, utteranceId, forcedSplit);
+        },
+      });
+
+      vadRef.current = vad;
+
+      // Wire VAD into the PCM stream
+      pcmListenerRef.current = (samples: Float32Array) => {
+        vad.processChunk(samples);
+      };
+
+      const handle = await startAudioCapture({
+        onPCMData: (samples) => pcmListenerRef.current(samples),
         onError: (err) => {
           dispatch({ type: 'SET_ERROR', payload: err.message });
         },
       });
+
       captureRef.current = handle;
       dispatch({ type: 'MIC_GRANTED' });
       dispatch({ type: 'START_LISTENING' });
@@ -212,10 +278,17 @@ export function useTranslatorSession() {
   const _doStopCapture = useCallback(() => {
     captureRef.current?.stop();
     captureRef.current = null;
+
+    vadRef.current?.reset();
+    vadRef.current = null;
+
+    // Reset PCM listener to no-op
+    pcmListenerRef.current = () => undefined;
+
     dispatch({ type: 'STOP_LISTENING' });
   }, []);
 
-  // ── High-level toggle (drives BigMicButton) ─────────────────────────────────
+  // ── High-level toggle ───────────────────────────────────────────────────────
 
   const toggleSession = useCallback(() => {
     const { sessionStatus, modelStatus } = state;
@@ -230,7 +303,12 @@ export function useTranslatorSession() {
   return {
     state,
     dispatch,
-    /** Replace this ref's current value to intercept raw PCM data (used by VAD). */
+    /**
+     * Register a callback to receive finalized utterance audio from the VAD.
+     * ASR (step 5) sets `speechEndCallbackRef.current` to its handler.
+     */
+    speechEndCallbackRef,
+    /** Raw PCM listener — exposed for testing / future pipeline stages. */
     pcmListenerRef,
     // Language
     setLang,
