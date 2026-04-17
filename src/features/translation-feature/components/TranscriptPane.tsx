@@ -57,20 +57,48 @@ function UncertainBadge() {
   );
 }
 
+function TranslationLabel() {
+  return (
+    <span className="text-[9px] text-[#d5d728]/40 uppercase tracking-widest font-medium">
+      Translation
+    </span>
+  );
+}
+
+/**
+ * Determines what this pane should render for a given utterance.
+ *
+ * Rules:
+ *   speakerSide === this side  → SOURCE bubble (the speaker's own words)
+ *   speakerSide === other side → TRANSLATION bubble (their words in this pane's language)
+ *   speakerSide === 'unknown'  → SOURCE bubble with uncertain badge in left pane only
+ */
+function getPaneRole(
+  utterance: Utterance,
+  side: 'left' | 'right',
+): 'source' | 'translation' | 'unknown-source' | null {
+  if (utterance.speakerSide === side) return 'source';
+  if (utterance.speakerSide === 'unknown') {
+    // Unknown falls through to left pane only
+    return side === 'left' ? 'unknown-source' : null;
+  }
+  // Opposite speaker → show their translation in this pane
+  return 'translation';
+}
+
 export function TranscriptPane({ side, language, utterances }: TranscriptPaneProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Primary: utterances assigned to this side.
-  // 'unknown' utterances fall through to the left pane as an unresolved fallback.
-  const sideUtterances = utterances.filter(
-    (u) => u.speakerSide === side || (side === 'left' && u.speakerSide === 'unknown'),
+  const isRtl = language.dir === 'rtl';
+
+  // Filter to only utterances this pane should render
+  const visibleUtterances = utterances.filter(
+    (u) => getPaneRole(u, side) !== null,
   );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [sideUtterances.length]);
-
-  const isRtl = language.dir === 'rtl';
+  }, [visibleUtterances.length]);
 
   return (
     <div className="flex flex-col h-full bg-white/[0.03] border border-white/10 rounded-2xl backdrop-blur-md overflow-hidden">
@@ -87,16 +115,44 @@ export function TranscriptPane({ side, language, utterances }: TranscriptPanePro
 
       {/* Utterances */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
-        {sideUtterances.length === 0 ? (
+        {visibleUtterances.length === 0 ? (
           <EmptyState side={side} />
         ) : (
-          sideUtterances.map((utterance) => {
+          visibleUtterances.map((utterance) => {
+            const role = getPaneRole(utterance, side)!;
             const isUncertain =
-              utterance.speakerSide === 'unknown' ||
+              role === 'unknown-source' ||
               (utterance.confidence !== undefined &&
                 utterance.confidence < LOW_CONFIDENCE_THRESHOLD &&
                 !utterance.isPartial);
 
+            if (role === 'translation') {
+              // Translation bubble — show the translated text (opposite speaker's words)
+              const hasText = !!utterance.translatedText;
+              return (
+                <div
+                  key={utterance.id}
+                  className={[
+                    'space-y-1 transition-opacity duration-200 pl-3 border-l border-[#d5d728]/20',
+                    utterance.isPartial ? 'opacity-40' : 'opacity-100',
+                  ].join(' ')}
+                >
+                  <TranslationLabel />
+                  <p
+                    className={[
+                      'text-sm leading-relaxed',
+                      utterance.isPartial || !hasText
+                        ? 'text-white/35 italic'
+                        : 'text-white/75',
+                    ].join(' ')}
+                  >
+                    {hasText ? utterance.translatedText : '…'}
+                  </p>
+                </div>
+              );
+            }
+
+            // Source bubble (role === 'source' or 'unknown-source')
             return (
               <div
                 key={utterance.id}
@@ -105,7 +161,6 @@ export function TranscriptPane({ side, language, utterances }: TranscriptPanePro
                   utterance.isPartial ? 'opacity-50' : 'opacity-100',
                 ].join(' ')}
               >
-                {/* Uncertain attribution badge — shown on finalised entries only */}
                 {isUncertain && <UncertainBadge />}
 
                 <p
@@ -118,13 +173,7 @@ export function TranscriptPane({ side, language, utterances }: TranscriptPanePro
                   {utterance.sourceText}
                 </p>
 
-                {utterance.translatedText && (
-                  <p className="text-xs text-[#d5d728]/70 leading-relaxed">
-                    {utterance.translatedText}
-                  </p>
-                )}
-
-                {/* Speaker confidence bar (finalised, certain utterances only) */}
+                {/* Speaker confidence bar (finalised, certain source utterances only) */}
                 {utterance.confidence !== undefined &&
                   !utterance.isPartial &&
                   !isUncertain && (
