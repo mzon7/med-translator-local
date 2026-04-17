@@ -56,6 +56,13 @@ export type SessionStatus =
 export interface TranslatorSessionState {
   modelStatus: ModelStatus;
   modelProgress: number; // 0–100
+  /**
+   * True when the current load phase is being served from the IndexedDB cache
+   * (no network download needed).  Null when the status is not yet known.
+   */
+  modelFromCache: boolean | null;
+  /** The file name currently being fetched or loaded from cache, if known */
+  modelCurrentFile: string | null;
   micStatus: MicStatus;
   sessionStatus: SessionStatus;
   leftLang: Language;
@@ -68,7 +75,16 @@ export interface TranslatorSessionState {
 
 export type TranslatorAction =
   | { type: 'SET_LANG'; payload: { side: 'left' | 'right'; lang: Language } }
-  | { type: 'MODEL_LOADING'; payload?: { progress: number } }
+  | {
+      type: 'MODEL_LOADING';
+      payload?: {
+        progress: number;
+        /** True when this file was served from IndexedDB cache */
+        fromCache?: boolean;
+        /** The file name currently being loaded */
+        file?: string;
+      };
+    }
   | { type: 'MODEL_READY' }
   | { type: 'MODEL_ERROR'; payload: string }
   | { type: 'MIC_REQUEST' }

@@ -16,6 +16,7 @@ import { createSpeakerHeuristics, type SpeakerHeuristicsHandle } from './speaker
 import { loadModels as _loadModels, type ProgressCallback } from './modelManager';
 import { transcribe } from './asr';
 import { translate } from './translate';
+import { sanitizeForLog, assertLocalOnly } from './privacyBoundary';
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
 
@@ -34,10 +35,18 @@ function reducer(
         ...state,
         modelStatus: 'loading',
         modelProgress: action.payload?.progress ?? state.modelProgress,
+        modelFromCache: action.payload?.fromCache ?? state.modelFromCache,
+        modelCurrentFile: action.payload?.file ?? state.modelCurrentFile,
         error: null,
       };
     case 'MODEL_READY':
-      return { ...state, modelStatus: 'ready', modelProgress: 100, error: null };
+      return {
+        ...state,
+        modelStatus: 'ready',
+        modelProgress: 100,
+        modelCurrentFile: null,
+        error: null,
+      };
     case 'MODEL_ERROR':
       return { ...state, modelStatus: 'error', error: action.payload };
 
@@ -129,6 +138,8 @@ function buildInitialState(): TranslatorSessionState {
   return {
     modelStatus: 'unloaded',
     modelProgress: 0,
+    modelFromCache: null,
+    modelCurrentFile: null,
     micStatus: 'idle',
     sessionStatus: 'idle',
     leftLang: left,
@@ -237,17 +248,23 @@ export function useTranslatorSession() {
   const downloadModel = useCallback(async () => {
     dispatch({ type: 'MODEL_LOADING' });
     try {
-      const onProgress: ProgressCallback = ({ phase, progress }) => {
+      const onProgress: ProgressCallback = ({ phase, progress, fromCache, file }) => {
         // Map two phases (asr=0-50%, translation=50-100%) into a single bar
-        const overall =
-          phase === 'asr' ? progress / 2 : 50 + progress / 2;
-        dispatch({ type: 'MODEL_LOADING', payload: { progress: Math.round(overall) } });
+        const overall = phase === 'asr' ? progress / 2 : 50 + progress / 2;
+        dispatch({
+          type: 'MODEL_LOADING',
+          payload: {
+            progress: Math.round(overall),
+            fromCache,
+            file,
+          },
+        });
       };
       await _loadModels(onProgress);
       dispatch({ type: 'MODEL_READY' });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      dispatch({ type: 'MODEL_ERROR', payload: `Failed to load models: ${msg}` });
+      const safe = sanitizeForLog(err);
+      dispatch({ type: 'MODEL_ERROR', payload: `Failed to load models: ${safe}` });
     }
   }, []);
 
@@ -335,10 +352,10 @@ export function useTranslatorSession() {
 
         try {
           // ── 1. ASR — transcribe with streaming partial updates ──────────
-          const { text: sourceText, confidence: asrConf } = await transcribe(
-            audio,
-            srcLang,
-            {
+          // assertLocalOnly guards against any accidental network calls
+          // during model inference (dev-mode only; zero-cost in production).
+          const { text: sourceText, confidence: asrConf } = await assertLocalOnly(() =>
+            transcribe(audio, srcLang, {
               onPartial: (partial) => {
                 // Update the existing partial entry with the growing transcript
                 dispatch({
@@ -355,11 +372,13 @@ export function useTranslatorSession() {
                   } satisfies Utterance,
                 });
               },
-            },
+            }),
           );
 
           // ── 2. Translate ─────────────────────────────────────────────────
-          const translatedText = await translate(sourceText, srcLang, tgtLang);
+          const translatedText = await assertLocalOnly(() =>
+            translate(sourceText, srcLang, tgtLang),
+          );
 
           // ── 3. Finalize utterance ────────────────────────────────────────
           dispatch({
@@ -378,7 +397,8 @@ export function useTranslatorSession() {
             } satisfies Utterance,
           });
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
+          // sanitizeForLog strips non-ASCII to avoid leaking transcript text
+          const msg = sanitizeForLog(err);
           console.error('[session] ASR/translate error:', msg);
 
           // Store audio so the user can retry without re-capturing
@@ -475,24 +495,28 @@ export function useTranslatorSession() {
       dispatch({ type: 'RETRY_UTTERANCE', payload: { id: utteranceId } });
 
       try {
-        const { text: sourceText, confidence: asrConf } = await transcribe(audio, srcLang, {
-          onPartial: (partialText) => {
-            dispatch({
-              type: 'ADD_PARTIAL_TRANSCRIPT',
-              payload: {
-                id: utteranceId,
-                timestampStart: existing?.timestampStart ?? Date.now(),
-                speakerSide,
-                sourceLang: srcLang,
-                targetLang: tgtLang,
-                sourceText: partialText,
-                isPartial: true,
-              } satisfies Utterance,
-            });
-          },
-        });
+        const { text: sourceText, confidence: asrConf } = await assertLocalOnly(() =>
+          transcribe(audio, srcLang, {
+            onPartial: (partialText) => {
+              dispatch({
+                type: 'ADD_PARTIAL_TRANSCRIPT',
+                payload: {
+                  id: utteranceId,
+                  timestampStart: existing?.timestampStart ?? Date.now(),
+                  speakerSide,
+                  sourceLang: srcLang,
+                  targetLang: tgtLang,
+                  sourceText: partialText,
+                  isPartial: true,
+                } satisfies Utterance,
+              });
+            },
+          }),
+        );
 
-        const translatedText = await translate(sourceText, srcLang, tgtLang);
+        const translatedText = await assertLocalOnly(() =>
+          translate(sourceText, srcLang, tgtLang),
+        );
 
         dispatch({
           type: 'FINALIZE_UTTERANCE',
@@ -510,7 +534,7 @@ export function useTranslatorSession() {
           } satisfies Utterance,
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = sanitizeForLog(err);
         console.error('[session] retry ASR/translate error:', msg);
         // Put audio back so user can try again
         failedAudioMapRef.current.set(utteranceId, audio);

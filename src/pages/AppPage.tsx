@@ -183,7 +183,7 @@ export default function AppPage() {
         <div className="relative z-10 mx-4 mt-1 mb-2 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1.5">
           <div className="flex justify-between items-center">
             <span className="text-[10px] text-white/40 uppercase tracking-widest">
-              Downloading model
+              {state.modelFromCache === true ? 'Loading from cache' : 'Downloading model'}
             </span>
             <span className="text-[10px] text-[#d5d728]/60 font-mono">
               {state.modelProgress}%
@@ -191,15 +191,31 @@ export default function AppPage() {
           </div>
           <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#d5d728] rounded-full transition-all duration-500"
+              className={[
+                'h-full rounded-full transition-all duration-500',
+                state.modelFromCache === true ? 'bg-white/40' : 'bg-[#d5d728]',
+              ].join(' ')}
               style={{ width: `${state.modelProgress}%` }}
             />
           </div>
-          <p className="text-[10px] text-white/20">
-            {state.modelProgress < 50
-              ? 'Downloading ASR model (Whisper)…'
-              : 'Downloading translation model (NLLB-200)…'}
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] text-white/20 truncate">
+              {state.modelCurrentFile
+                ? state.modelCurrentFile.split('/').pop()
+                : state.modelProgress < 50
+                  ? state.modelFromCache === true
+                    ? 'Reading ASR model (Whisper) from cache…'
+                    : 'Downloading ASR model (Whisper)…'
+                  : state.modelFromCache === true
+                    ? 'Reading translation model (NLLB-200) from cache…'
+                    : 'Downloading translation model (NLLB-200)…'}
+            </p>
+            {state.modelFromCache === true && (
+              <span className="shrink-0 text-[9px] text-white/20 bg-white/5 px-1.5 py-0.5 rounded">
+                cached
+              </span>
+            )}
+          </div>
         </div>
       )}
 

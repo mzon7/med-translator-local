@@ -77,12 +77,23 @@ export interface ModelSet {
 }
 
 export interface ModelLoadPhase {
-  /** Which model is currently downloading */
+  /** Which model is currently downloading or loading from cache */
   phase: 'asr' | 'translation';
   /** Overall percentage for this phase, 0–100 */
   progress: number;
-  /** Optional: name of the file currently being fetched */
+  /** Name of the file currently being fetched or loaded from cache */
   file?: string;
+  /**
+   * True when all files seen so far for this phase were served from
+   * IndexedDB cache (no network download required).
+   * False as soon as any file requires a network fetch.
+   * Undefined before the first progress event.
+   */
+  fromCache?: boolean;
+  /** Count of files confirmed as cache hits so far */
+  cachedFiles: number;
+  /** Total count of files seen so far for this phase */
+  totalFiles: number;
 }
 
 export type ProgressCallback = (info: ModelLoadPhase) => void;
@@ -96,19 +107,67 @@ let _loading = false;
 
 /**
  * Transforms Transformers.js per-file progress events into a single rolling
- * percentage for each phase.  Files with unknown total size are assumed equal.
+ * percentage for each phase, and tracks whether files are served from the
+ * IndexedDB cache or require a network download.
+ *
+ * Transformers.js emits these relevant statuses:
+ *   'initiate'  — file is being resolved (not yet in cache)
+ *   'download'  — network download has started (not cached)
+ *   'progress'  — download progress update
+ *   'cached'    — file was served from IndexedDB (no download)
+ *   'done'      — file fully loaded
+ *   'ready'     — pipeline fully initialised
  */
 function makeProgressTracker(phase: ModelLoadPhase['phase'], cb: ProgressCallback) {
   const fileProgress = new Map<string, number>(); // file → 0-100
+  const fileCached = new Map<string, boolean>();   // file → from cache?
 
   return function onHFProgress(data: Record<string, unknown>) {
-    if (data.status !== 'progress') return;
+    const status = data.status as string | undefined;
+    if (!status) return;
+
     const file = String(data.file ?? data.name ?? '');
-    const pct = typeof data.progress === 'number' ? data.progress : 0;
-    fileProgress.set(file, pct);
+
+    if (status === 'cached') {
+      // File was fully served from IndexedDB — count as complete
+      if (file) {
+        fileProgress.set(file, 100);
+        fileCached.set(file, true);
+      }
+    } else if (status === 'download' || status === 'initiate') {
+      // Network fetch starting — this file is NOT from cache
+      if (file) fileCached.set(file, false);
+    } else if (status === 'progress') {
+      const pct = typeof data.progress === 'number' ? data.progress : 0;
+      if (file) {
+        fileProgress.set(file, pct);
+        // Only mark as non-cached if not already marked as cached
+        if (!fileCached.has(file)) fileCached.set(file, false);
+      }
+    } else if (status === 'done') {
+      if (file && !fileProgress.has(file)) fileProgress.set(file, 100);
+    } else {
+      return; // 'ready' and other statuses — no progress to emit
+    }
+
+    if (fileProgress.size === 0) return;
+
     const entries = [...fileProgress.values()];
     const avg = entries.reduce((s, v) => s + v, 0) / entries.length;
-    cb({ phase, progress: Math.round(avg), file });
+
+    const cachedCount = [...fileCached.values()].filter(Boolean).length;
+    const totalCount = fileCached.size;
+    // fromCache is true only when EVERY known file was a cache hit
+    const fromCache = totalCount > 0 && cachedCount === totalCount;
+
+    cb({
+      phase,
+      progress: Math.round(avg),
+      file,
+      fromCache,
+      cachedFiles: cachedCount,
+      totalFiles: totalCount,
+    });
   };
 }
 
