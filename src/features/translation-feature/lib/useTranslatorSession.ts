@@ -389,7 +389,7 @@ export function useTranslatorSession() {
           // during model inference (dev-mode only; zero-cost in production).
           const { text: sourceText, confidence: asrConf } = await assertLocalOnly(() =>
             transcribe(audio, srcLang, {
-              onPartial: (partial) => {
+              onPartial: (partialText) => {
                 // Update the existing partial entry with the growing transcript
                 dispatch({
                   type: 'ADD_PARTIAL_TRANSCRIPT',
@@ -399,8 +399,7 @@ export function useTranslatorSession() {
                     speakerSide,
                     sourceLang: srcLang,
                     targetLang: tgtLang,
-                    sourceText: partial,
-                    confidence: partial?.confidence,
+                    sourceText: partialText,
                     isPartial: true,
                   } satisfies Utterance,
                 });

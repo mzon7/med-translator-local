@@ -82,7 +82,7 @@ export async function transcribe(
   let partialAccumulator = '';
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const output: any = await transcriber(audio, {
+  const output: any = await (transcriber as any)(audio, {
     language,
     task: 'transcribe',
     // Chunk the audio into 30s windows with a 5s stride for long utterances

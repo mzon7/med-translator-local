@@ -74,7 +74,7 @@ export async function translate(
   const tgt = toNllbLang(tgtLang);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const output: any = await translator(text, {
+  const output: any = await (translator as any)(text, {
     src_lang: src,
     tgt_lang: tgt,
     // Deterministic beam search — important for medical translations

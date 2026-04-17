@@ -32,9 +32,6 @@ export const VAD_SAMPLE_RATE = 16_000;
 /** Duration of one VAD analysis frame in milliseconds */
 const FRAME_MS = 10;
 
-/** Samples per frame (10 ms @ 16 kHz) */
-const FRAME_SIZE = (VAD_SAMPLE_RATE * FRAME_MS) / 1_000; // 160
-
 /** Speed at which the noise floor tracks ambient level (0 = frozen, 1 = instant) */
 const NOISE_FLOOR_ALPHA = 0.015;
 
