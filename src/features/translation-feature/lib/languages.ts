@@ -42,3 +42,49 @@ export function persistLanguage(side: 'left' | 'right', lang: Language): void {
     // localStorage unavailable — ignore
   }
 }
+
+// ─── Model-ready flag ─────────────────────────────────────────────────────────
+
+/**
+ * Key used to record that the user has previously loaded the local AI models.
+ * When this flag is present, the app auto-starts model loading on mount
+ * because the weights are very likely cached in IndexedDB already.
+ */
+const STORAGE_KEY_MODEL_READY = 'med_translator_model_ready';
+
+/**
+ * Persists a flag indicating that models have been successfully loaded at
+ * least once.  Called after MODEL_READY so subsequent visits can auto-load
+ * from the IndexedDB cache without requiring a manual "Download" tap.
+ */
+export function persistModelReady(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_MODEL_READY, '1');
+  } catch {
+    // localStorage unavailable — ignore
+  }
+}
+
+/**
+ * Returns true if models have been successfully loaded in a previous session
+ * and are likely cached in IndexedDB.
+ */
+export function loadModelReady(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY_MODEL_READY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Clears the model-ready flag.  Called when a load attempt fails so the next
+ * visit does not auto-start a failing load.
+ */
+export function clearModelReady(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY_MODEL_READY);
+  } catch {
+    // localStorage unavailable — ignore
+  }
+}

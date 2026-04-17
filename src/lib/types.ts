@@ -100,4 +100,6 @@ export type TranslatorAction =
   | { type: 'FAIL_UTTERANCE'; payload: { id: string; reason: string } }
   /** Clear a failed utterance's error state so it can be retried */
   | { type: 'RETRY_UTTERANCE'; payload: { id: string } }
-  | { type: 'SET_ERROR'; payload: string };
+  | { type: 'SET_ERROR'; payload: string }
+  /** Wipe all utterances from the in-memory transcript (no server call) */
+  | { type: 'CLEAR_TRANSCRIPT' };

@@ -5,7 +5,13 @@ import type {
   Language,
   Utterance,
 } from '../../../lib/types';
-import { loadPersistedLanguages, persistLanguage } from './languages';
+import {
+  loadPersistedLanguages,
+  persistLanguage,
+  persistModelReady,
+  loadModelReady,
+  clearModelReady,
+} from './languages';
 import {
   startAudioCapture,
   type AudioCaptureHandle,
@@ -126,6 +132,10 @@ function reducer(
     case 'SET_ERROR':
       return { ...state, sessionStatus: 'error', error: action.payload };
 
+    case 'CLEAR_TRANSCRIPT':
+      // Wipes in-memory transcript only — no server call, no IndexedDB write
+      return { ...state, utterances: [] };
+
     default:
       return state;
   }
@@ -219,6 +229,18 @@ export function useTranslatorSession() {
     };
   }, []);
 
+  /**
+   * Auto-load models on mount when the modelReady flag is set in localStorage,
+   * indicating weights are likely cached in IndexedDB from a previous session.
+   * This makes subsequent visits feel instant (cache load instead of download).
+   */
+  useEffect(() => {
+    if (loadModelReady()) {
+      void downloadModel();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally runs once on mount only
+
   // ── Language ────────────────────────────────────────────────────────────────
 
   const setLang = useCallback((side: 'left' | 'right', lang: Language) => {
@@ -247,6 +269,8 @@ export function useTranslatorSession() {
    */
   const downloadModel = useCallback(async () => {
     dispatch({ type: 'MODEL_LOADING' });
+    // Clear flag at start — it will be re-set only on success
+    clearModelReady();
     try {
       const onProgress: ProgressCallback = ({ phase, progress, fromCache, file }) => {
         // Map two phases (asr=0-50%, translation=50-100%) into a single bar
@@ -261,6 +285,8 @@ export function useTranslatorSession() {
         });
       };
       await _loadModels(onProgress);
+      // Persist flag so next visit auto-loads from IndexedDB cache
+      persistModelReady();
       dispatch({ type: 'MODEL_READY' });
     } catch (err) {
       const safe = sanitizeForLog(err);
@@ -286,6 +312,13 @@ export function useTranslatorSession() {
   }, []);
   const finalizeUtterance = useCallback((utterance: Utterance) => {
     dispatch({ type: 'FINALIZE_UTTERANCE', payload: utterance });
+  }, []);
+  /**
+   * Clears all utterances from the in-memory transcript.
+   * Nothing is written to the server — transcripts are never persisted remotely.
+   */
+  const clearTranscripts = useCallback(() => {
+    dispatch({ type: 'CLEAR_TRANSCRIPT' });
   }, []);
 
   // ── Error ───────────────────────────────────────────────────────────────────
@@ -583,6 +616,7 @@ export function useTranslatorSession() {
     // Transcripts
     addPartialTranscript,
     finalizeUtterance,
+    clearTranscripts,
     // Error
     setError,
     // Convenience
