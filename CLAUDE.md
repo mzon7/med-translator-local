@@ -47,3 +47,47 @@
   - `import { createProjectClient, dbTable, validateEnv, callEdgeFunction } from '@mzon7/zon-incubator-sdk'`
   - `import { AuthProvider, useAuth, ProtectedRoute, AuthCallback } from '@mzon7/zon-incubator-sdk/auth'`
 - The Supabase client and dbTable helper are already configured in `src/lib/supabase.ts`
+
+## Project Context
+
+Med Translator Local — Coding Conventions (for Claude)
+
+Scope
+- Single-page app only: `AppPage.tsx` composes minimal UI (no extra pages/flows).
+- Keep feature set minimal: language pickers + big mic button + transcript panes + status + minimal settings.
+
+Core Architecture
+- State: only local React state + `useTranslatorSession` hook with a small reducer.
+  - Session lifecycle states: `idle | listening | processing | error | unsupported`.
+  - No global store; no cross-component state outside the session hook and props.
+- Audio pipeline modules (don’t bypass):
+  - `audioCapture.ts` (MediaDevices + AudioWorklet) → `vad.ts` (energy VAD) → `speakerHeuristics.ts` (pitch/centroid heuristics).
+- ML pipeline modules (don’t inline):
+  - `modelManager.ts` (load/unload TranslateGemma 4B, WebGPU detect)
+  - `asr.ts` (local STT wrapper)
+  - `translate.ts` (local translation wrapper)
+- If WebGPU/runtime unsupported: show explicit “device not supported” UI; never fall back to cloud.
+
+UI Conventions
+- Components are small and presentational:
+  - `LanguagePicker`, `BigMicButton`, `TranscriptPane`, `StatusBar`, `SettingsSheet`.
+- Tailwind for styling; keep layout simple and mobile-first.
+- Status always visible (mic permission, model download/loading, listening/processing, errors).
+
+Data & Persistence
+- No server persistence for MVP.
+- Optional IndexedDB only for:
+  - model cache/weights
+  - last-used language pair
+- PWA offline caching must not automatically cache huge model weights; only cache via explicit “download model” action.
+
+Streaming/Realtime Behavior
+- Prefer streaming token generation for translation output.
+- Transcripts should append incrementally; avoid complex editing features.
+
+Integration Boundaries
+- Web APIs only: Web Audio, MediaDevices, WebGPU feature detection.
+- Vercel static deploy; if ML runtime needs it, assume COOP/COEP headers are required and surface a clear error state when missing.
+
+Types
+- Shared types live in `src/lib/types.ts`; use them across audio/ML/session modules.
