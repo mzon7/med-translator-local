@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Brand font */
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
 /* PWA native-feel: prevent zoom, bounce, accidental selection */
 html {
   touch-action: manipulation;

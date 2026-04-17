@@ -3,7 +3,7 @@ import { ProtectedRoute, AuthCallback } from "@mzon7/zon-incubator-sdk/auth";
 import { supabase } from "./lib/supabase";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
-import HomePage from "./pages/HomePage";
+import AppPage from "./pages/AppPage";
 
 export default function App() {
   return (
@@ -13,21 +13,21 @@ export default function App() {
       <Route path="/signup" element={<SignupPage />} />
       <Route
         path="/auth/callback"
-        element={<AuthCallback supabase={supabase} redirectTo="/home" />}
+        element={<AuthCallback supabase={supabase} redirectTo="/app" />}
       />
 
       {/* Protected routes */}
       <Route
-        path="/home"
+        path="/app"
         element={
           <ProtectedRoute>
-            <HomePage />
+            <AppPage />
           </ProtectedRoute>
         }
       />
 
       {/* Default redirect */}
-      <Route path="*" element={<Navigate to="/home" replace />} />
+      <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>
   );
 }
