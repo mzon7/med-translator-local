@@ -52,6 +52,13 @@ function reducer(
         sessionStatus: 'error',
         error: 'Microphone access was denied. Please allow microphone access and try again.',
       };
+    case 'MIC_RETRY':
+      return {
+        ...state,
+        micStatus: 'idle',
+        sessionStatus: 'idle',
+        error: null,
+      };
 
     case 'START_LISTENING':
       return { ...state, sessionStatus: 'listening', error: null };
@@ -80,6 +87,30 @@ function reducer(
       return {
         ...state,
         utterances: [...rest, { ...action.payload, isPartial: false }],
+      };
+    }
+
+    case 'FAIL_UTTERANCE': {
+      // Mark the utterance as failed without touching sessionStatus
+      return {
+        ...state,
+        utterances: state.utterances.map((u) =>
+          u.id === action.payload.id
+            ? { ...u, isPartial: false, failed: true, failedReason: action.payload.reason }
+            : u,
+        ),
+      };
+    }
+
+    case 'RETRY_UTTERANCE': {
+      // Clear failed state while the retry is in-flight
+      return {
+        ...state,
+        utterances: state.utterances.map((u) =>
+          u.id === action.payload.id
+            ? { ...u, failed: false, failedReason: undefined, isPartial: true, sourceText: '…' }
+            : u,
+        ),
       };
     }
 
@@ -156,6 +187,13 @@ export function useTranslatorSession() {
    */
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  /**
+   * Stores PCM audio for failed utterances keyed by utterance id.
+   * Allows retryUtterance() to re-run the pipeline without re-capturing.
+   * Entries are removed after a successful retry or explicit discard.
+   */
+  const failedAudioMapRef = useRef<Map<string, Float32Array>>(new Map());
 
   // Clean up on unmount
   useEffect(() => {
@@ -343,20 +381,13 @@ export function useTranslatorSession() {
           const msg = err instanceof Error ? err.message : String(err);
           console.error('[session] ASR/translate error:', msg);
 
-          // Finalize with an error placeholder so the UI isn't stuck
+          // Store audio so the user can retry without re-capturing
+          failedAudioMapRef.current.set(utteranceId, audio);
+
+          // Mark utterance failed — session stays alive, mic keeps recording
           dispatch({
-            type: 'FINALIZE_UTTERANCE',
-            payload: {
-              id: utteranceId,
-              timestampStart: partial?.timestampStart ?? Date.now(),
-              timestampEnd: Date.now(),
-              speakerSide,
-              sourceLang: srcLang,
-              targetLang: tgtLang,
-              sourceText: '[Transcription error]',
-              confidence: 0,
-              isPartial: false,
-            } satisfies Utterance,
+            type: 'FAIL_UTTERANCE',
+            payload: { id: utteranceId, reason: msg },
           });
         }
       };
@@ -407,6 +438,88 @@ export function useTranslatorSession() {
     dispatch({ type: 'STOP_LISTENING' });
   }, []);
 
+  // ── Mic retry ───────────────────────────────────────────────────────────────
+
+  /**
+   * Resets mic + session state and re-requests microphone access.
+   * Called by the "Try again" button shown after mic denial.
+   */
+  const retryMic = useCallback(() => {
+    dispatch({ type: 'MIC_RETRY' });
+    void _doStartCapture();
+  }, [_doStartCapture]);
+
+  // ── Utterance retry ─────────────────────────────────────────────────────────
+
+  /**
+   * Re-runs the ASR + translation pipeline for a previously failed utterance.
+   * The original PCM audio is retrieved from failedAudioMapRef.
+   * If audio is no longer available, the utterance remains failed.
+   */
+  const retryUtterance = useCallback(
+    async (utteranceId: string) => {
+      const audio = failedAudioMapRef.current.get(utteranceId);
+      if (!audio) {
+        console.warn('[session] retryUtterance: no cached audio for', utteranceId);
+        return;
+      }
+      failedAudioMapRef.current.delete(utteranceId);
+
+      const { leftLang, rightLang, utterances } = stateRef.current;
+      const existing = utterances.find((u) => u.id === utteranceId);
+      const speakerSide = existing?.speakerSide ?? 'left';
+      const srcLang = speakerSide === 'right' ? rightLang.code : leftLang.code;
+      const tgtLang = speakerSide === 'right' ? leftLang.code : rightLang.code;
+
+      // Reset to partial state so the pane shows progress
+      dispatch({ type: 'RETRY_UTTERANCE', payload: { id: utteranceId } });
+
+      try {
+        const { text: sourceText, confidence: asrConf } = await transcribe(audio, srcLang, {
+          onPartial: (partialText) => {
+            dispatch({
+              type: 'ADD_PARTIAL_TRANSCRIPT',
+              payload: {
+                id: utteranceId,
+                timestampStart: existing?.timestampStart ?? Date.now(),
+                speakerSide,
+                sourceLang: srcLang,
+                targetLang: tgtLang,
+                sourceText: partialText,
+                isPartial: true,
+              } satisfies Utterance,
+            });
+          },
+        });
+
+        const translatedText = await translate(sourceText, srcLang, tgtLang);
+
+        dispatch({
+          type: 'FINALIZE_UTTERANCE',
+          payload: {
+            id: utteranceId,
+            timestampStart: existing?.timestampStart ?? Date.now(),
+            timestampEnd: Date.now(),
+            speakerSide,
+            sourceLang: srcLang,
+            targetLang: tgtLang,
+            sourceText,
+            translatedText,
+            confidence: asrConf,
+            isPartial: false,
+          } satisfies Utterance,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[session] retry ASR/translate error:', msg);
+        // Put audio back so user can try again
+        failedAudioMapRef.current.set(utteranceId, audio);
+        dispatch({ type: 'FAIL_UTTERANCE', payload: { id: utteranceId, reason: msg } });
+      }
+    },
+    [],
+  );
+
   // ── High-level toggle ───────────────────────────────────────────────────────
 
   const toggleSession = useCallback(() => {
@@ -450,5 +563,7 @@ export function useTranslatorSession() {
     setError,
     // Convenience
     toggleSession,
+    retryMic,
+    retryUtterance,
   };
 }
