@@ -5,23 +5,15 @@ import { TranscriptPane } from '../features/translation-feature/components/Trans
 import { StatusBar } from '../features/translation-feature/components/StatusBar';
 
 export default function AppPage() {
-  const {
-    state,
-    setLeftLanguage,
-    setRightLanguage,
-    toggleSession,
-  } = useTranslatorSession();
+  const { state, setLang, toggleSession } = useTranslatorSession();
 
   const sessionActive =
-    state.session === 'listening' || state.session === 'processing';
+    state.sessionStatus === 'listening' || state.sessionStatus === 'processing';
 
   return (
     <div className="min-h-screen bg-black flex flex-col overflow-hidden">
-      {/* Ambient glow background */}
-      <div
-        className="pointer-events-none fixed inset-0 z-0"
-        aria-hidden="true"
-      >
+      {/* Ambient glow */}
+      <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">
         <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] rounded-full bg-[#d5d728]/5 blur-[120px]" />
         <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#d5d728]/4 blur-[100px]" />
       </div>
@@ -29,7 +21,6 @@ export default function AppPage() {
       {/* Header */}
       <header className="relative z-10 flex items-center justify-between px-6 pt-6 pb-2">
         <div className="flex items-center gap-2">
-          {/* Logo mark */}
           <svg
             className="w-6 h-6 text-[#d5d728]"
             fill="none"
@@ -52,16 +43,15 @@ export default function AppPage() {
         </span>
       </header>
 
-      {/* Language pickers row */}
+      {/* Language pickers */}
       <div className="relative z-10 flex items-center justify-between px-6 pt-4 pb-2 gap-4">
         <LanguagePicker
           side="left"
-          value={state.leftLanguage}
-          onChange={setLeftLanguage}
+          value={state.leftLang}
+          onChange={(lang) => setLang('left', lang)}
           disabled={sessionActive}
         />
-        {/* Arrow icon between pickers */}
-        <div className="flex items-center gap-1 text-white/20">
+        <div className="text-white/20">
           <svg
             className="w-4 h-4"
             fill="none"
@@ -78,8 +68,8 @@ export default function AppPage() {
         </div>
         <LanguagePicker
           side="right"
-          value={state.rightLanguage}
-          onChange={setRightLanguage}
+          value={state.rightLang}
+          onChange={(lang) => setLang('right', lang)}
           disabled={sessionActive}
         />
       </div>
@@ -87,7 +77,8 @@ export default function AppPage() {
       {/* Status bar */}
       <div className="relative z-10 px-6">
         <StatusBar
-          session={state.session}
+          sessionStatus={state.sessionStatus}
+          micStatus={state.micStatus}
           modelStatus={state.modelStatus}
           error={state.error}
         />
@@ -97,20 +88,21 @@ export default function AppPage() {
       <div className="relative z-10 flex-1 grid grid-cols-2 gap-3 px-4 pb-4 min-h-0 mt-2">
         <TranscriptPane
           side="left"
-          language={state.leftLanguage}
-          entries={state.transcripts}
+          language={state.leftLang}
+          utterances={state.utterances}
         />
         <TranscriptPane
           side="right"
-          language={state.rightLanguage}
-          entries={state.transcripts}
+          language={state.rightLang}
+          utterances={state.utterances}
         />
       </div>
 
-      {/* Big mic button — fixed at bottom center */}
+      {/* Big mic button */}
       <div className="relative z-10 flex justify-center pb-8 pt-4">
         <BigMicButton
-          session={state.session}
+          sessionStatus={state.sessionStatus}
+          micStatus={state.micStatus}
           modelStatus={state.modelStatus}
           modelProgress={state.modelProgress}
           onToggle={toggleSession}

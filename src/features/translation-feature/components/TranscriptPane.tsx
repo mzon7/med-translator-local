@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
-import type { TranscriptEntry, Language } from '../../../lib/types';
+import type { Utterance, Language } from '../../../lib/types';
 
 interface TranscriptPaneProps {
   side: 'left' | 'right';
   language: Language;
-  entries: TranscriptEntry[];
+  utterances: Utterance[];
 }
 
 function EmptyState({ side }: { side: 'left' | 'right' }) {
@@ -30,14 +30,14 @@ function EmptyState({ side }: { side: 'left' | 'right' }) {
   );
 }
 
-export function TranscriptPane({ side, language, entries }: TranscriptPaneProps) {
+export function TranscriptPane({ side, language, utterances }: TranscriptPaneProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
-  const sideEntries = entries.filter((e) => e.speaker === side);
+  const sideUtterances = utterances.filter((u) => u.speakerSide === side);
 
-  // Auto-scroll to bottom on new entries
+  // Auto-scroll on new utterances
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [sideEntries.length]);
+  }, [sideUtterances.length]);
 
   const isRtl = language.dir === 'rtl';
 
@@ -54,26 +54,47 @@ export function TranscriptPane({ side, language, entries }: TranscriptPaneProps)
         <span className="ml-auto text-xs text-white/20">{language.label}</span>
       </div>
 
-      {/* Entries */}
+      {/* Utterances */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
-        {sideEntries.length === 0 ? (
+        {sideUtterances.length === 0 ? (
           <EmptyState side={side} />
         ) : (
-          sideEntries.map((entry) => (
+          sideUtterances.map((utterance) => (
             <div
-              key={entry.id}
-              className={`space-y-1 ${entry.isPartial ? 'opacity-50' : 'opacity-100'} transition-opacity duration-200`}
+              key={utterance.id}
+              className={[
+                'space-y-1 transition-opacity duration-200',
+                utterance.isPartial ? 'opacity-50' : 'opacity-100',
+              ].join(' ')}
             >
-              <p className={`text-sm leading-relaxed ${entry.isPartial ? 'text-white/60 italic' : 'text-white/90'}`}>
-                {entry.text}
+              <p
+                className={[
+                  'text-sm leading-relaxed',
+                  utterance.isPartial ? 'text-white/60 italic' : 'text-white/90',
+                ].join(' ')}
+              >
+                {utterance.sourceText}
               </p>
-              {entry.translatedText && (
+              {utterance.translatedText && (
                 <p className="text-xs text-[#d5d728]/70 leading-relaxed">
-                  {entry.translatedText}
+                  {utterance.translatedText}
                 </p>
               )}
+              {utterance.confidence !== undefined && !utterance.isPartial && (
+                <div className="flex items-center gap-1">
+                  <div className="h-px flex-1 bg-white/5 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#d5d728]/30 rounded-full"
+                      style={{ width: `${Math.round(utterance.confidence * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-[9px] text-white/15 font-mono">
+                    {Math.round(utterance.confidence * 100)}%
+                  </span>
+                </div>
+              )}
               <p className="text-[10px] text-white/20">
-                {new Date(entry.timestamp).toLocaleTimeString([], {
+                {new Date(utterance.timestampStart).toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit',
                   second: '2-digit',

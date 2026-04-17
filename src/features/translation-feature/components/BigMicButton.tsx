@@ -1,16 +1,17 @@
-import type { SessionState, ModelStatus } from '../../../lib/types';
+import type { SessionStatus, MicStatus, ModelStatus } from '../../../lib/types';
 
 interface BigMicButtonProps {
-  session: SessionState;
+  sessionStatus: SessionStatus;
+  micStatus: MicStatus;
   modelStatus: ModelStatus;
   modelProgress: number;
   onToggle: () => void;
 }
 
-function MicIcon({ active }: { active: boolean }) {
+function MicIcon() {
   return (
     <svg
-      className={`w-10 h-10 transition-colors duration-300 ${active ? 'text-black' : 'text-white'}`}
+      className="w-10 h-10 text-white"
       fill="none"
       stroke="currentColor"
       strokeWidth={1.5}
@@ -34,30 +35,23 @@ function MicIcon({ active }: { active: boolean }) {
 
 function StopIcon() {
   return (
-    <svg
-      className="w-9 h-9 text-black"
-      fill="currentColor"
-      viewBox="0 0 24 24"
-    >
+    <svg className="w-9 h-9 text-black" fill="currentColor" viewBox="0 0 24 24">
       <rect x="6" y="6" width="12" height="12" rx="2" />
     </svg>
   );
 }
 
-function SpinnerIcon() {
+function SpinnerIcon({ dark }: { dark?: boolean }) {
   return (
     <svg
-      className="w-10 h-10 text-black animate-spin"
+      className={`w-10 h-10 animate-spin ${dark ? 'text-black' : 'text-white'}`}
       fill="none"
       viewBox="0 0 24 24"
     >
       <circle
         className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="3"
+        cx="12" cy="12" r="10"
+        stroke="currentColor" strokeWidth="3"
       />
       <path
         className="opacity-75"
@@ -69,41 +63,37 @@ function SpinnerIcon() {
 }
 
 export function BigMicButton({
-  session,
+  sessionStatus,
+  micStatus,
   modelStatus,
   modelProgress,
   onToggle,
 }: BigMicButtonProps) {
-  const isActive = session === 'listening' || session === 'processing';
-  const isLoading = session === 'requestingMic' || session === 'processing';
+  const isListening = sessionStatus === 'listening';
+  const isProcessing = sessionStatus === 'processing';
+  const isRequestingMic = micStatus === 'requesting';
+  const isActive = isListening || isProcessing;
   const isModelLoading = modelStatus === 'loading';
+
   const isDisabled =
-    session === 'unsupported' ||
-    session === 'error' ||
-    modelStatus === 'error' ||
-    isModelLoading;
+    modelStatus !== 'ready' ||
+    sessionStatus === 'unsupported' ||
+    sessionStatus === 'error' ||
+    micStatus === 'denied';
 
   const label = (() => {
     if (modelStatus === 'unloaded') return 'Model not loaded';
     if (modelStatus === 'loading') return `Loading model… ${modelProgress}%`;
     if (modelStatus === 'error') return 'Model error';
-    switch (session) {
-      case 'idle': return 'Tap to start';
-      case 'requestingMic': return 'Requesting mic…';
-      case 'listening': return 'Listening…';
-      case 'processing': return 'Translating…';
-      case 'error': return 'Error — tap to retry';
-      case 'unsupported': return 'Device not supported';
-      default: return '';
-    }
+    if (micStatus === 'denied') return 'Mic access denied';
+    if (sessionStatus === 'unsupported') return 'Device not supported';
+    if (sessionStatus === 'error') return 'Error — check status';
+    if (isRequestingMic) return 'Requesting mic…';
+    if (isListening) return 'Listening…';
+    if (isProcessing) return 'Translating…';
+    return 'Tap to start';
   })();
 
-  // Ring pulse animation when listening
-  const ringClass = session === 'listening'
-    ? 'animate-ping absolute inset-0 rounded-full bg-[#d5d728] opacity-20'
-    : '';
-
-  // Button fill
   const buttonBg = isActive
     ? 'bg-[#d5d728]'
     : isDisabled
@@ -116,9 +106,11 @@ export function BigMicButton({
     ? 'border-white/10'
     : 'border-white/20 hover:border-[#d5d728]/60';
 
+  const showSpinner = isRequestingMic || isProcessing;
+
   return (
     <div className="flex flex-col items-center gap-4">
-      {/* Model loading bar */}
+      {/* Model loading progress bar */}
       {isModelLoading && (
         <div className="w-40 h-1 rounded-full bg-white/10 overflow-hidden">
           <div
@@ -128,10 +120,10 @@ export function BigMicButton({
         </div>
       )}
 
-      {/* Outer ring + button */}
+      {/* Ring + button */}
       <div className="relative flex items-center justify-center">
-        {session === 'listening' && (
-          <span className={ringClass} />
+        {isListening && (
+          <span className="animate-ping absolute inset-0 rounded-full bg-[#d5d728] opacity-20" />
         )}
 
         <button
@@ -140,30 +132,36 @@ export function BigMicButton({
           aria-label={label}
           className={[
             'relative w-28 h-28 rounded-full border-2 flex items-center justify-center',
-            'transition-all duration-300',
-            'shadow-lg',
+            'transition-all duration-300 shadow-lg',
             buttonBg,
             borderClass,
             isActive ? 'shadow-[#d5d728]/30 shadow-xl scale-105' : '',
-            isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer active:scale-95',
+            isDisabled
+              ? 'cursor-not-allowed opacity-50'
+              : 'cursor-pointer active:scale-95',
           ].join(' ')}
         >
-          {isLoading ? (
-            <SpinnerIcon />
-          ) : isActive ? (
+          {showSpinner ? (
+            <SpinnerIcon dark={isActive} />
+          ) : isListening ? (
             <StopIcon />
           ) : (
-            <MicIcon active={false} />
+            <MicIcon />
           )}
         </button>
       </div>
 
-      {/* State label */}
-      <p className={[
-        'text-sm font-medium tracking-wide transition-colors duration-300',
-        session === 'error' || modelStatus === 'error' ? 'text-red-400' : 'text-white/50',
-        session === 'listening' ? 'text-[#d5d728]' : '',
-      ].join(' ')}>
+      {/* Label */}
+      <p
+        className={[
+          'text-sm font-medium tracking-wide transition-colors duration-300',
+          sessionStatus === 'error' || modelStatus === 'error' || micStatus === 'denied'
+            ? 'text-red-400'
+            : isListening
+            ? 'text-[#d5d728]'
+            : 'text-white/50',
+        ].join(' ')}
+      >
         {label}
       </p>
     </div>
