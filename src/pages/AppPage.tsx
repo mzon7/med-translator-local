@@ -5,7 +5,7 @@ import { TranscriptPane } from '../features/translation-feature/components/Trans
 import { StatusBar } from '../features/translation-feature/components/StatusBar';
 
 export default function AppPage() {
-  const { state, setLang, toggleSession } = useTranslatorSession();
+  const { state, setLang, toggleSession, downloadModel } = useTranslatorSession();
 
   const sessionActive =
     state.sessionStatus === 'listening' || state.sessionStatus === 'processing';
@@ -83,6 +83,61 @@ export default function AppPage() {
           error={state.error}
         />
       </div>
+
+      {/* Model download panel — shown only when model is not yet loaded */}
+      {(state.modelStatus === 'unloaded' || state.modelStatus === 'error') && (
+        <div className="relative z-10 mx-4 mt-1 mb-2 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-white/60">
+              Local AI Model Required
+            </p>
+            <p className="text-[10px] text-white/25 mt-0.5">
+              Whisper (ASR) + NLLB-200 (translation) · ~640 MB · cached offline after first download
+            </p>
+          </div>
+          <button
+            onClick={() => void downloadModel()}
+            disabled={state.modelStatus === 'loading'}
+            className={[
+              'shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold',
+              'border transition-all duration-200',
+              state.modelStatus === 'error'
+                ? 'border-red-500/50 text-red-400 hover:bg-red-500/10'
+                : 'border-[#d5d728]/60 text-[#d5d728] hover:bg-[#d5d728]/10 active:scale-95',
+            ].join(' ')}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            {state.modelStatus === 'error' ? 'Retry' : 'Download Model'}
+          </button>
+        </div>
+      )}
+
+      {/* Model loading progress bar */}
+      {state.modelStatus === 'loading' && (
+        <div className="relative z-10 mx-4 mt-1 mb-2 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-1.5">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-white/40 uppercase tracking-widest">
+              Downloading model
+            </span>
+            <span className="text-[10px] text-[#d5d728]/60 font-mono">
+              {state.modelProgress}%
+            </span>
+          </div>
+          <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#d5d728] rounded-full transition-all duration-500"
+              style={{ width: `${state.modelProgress}%` }}
+            />
+          </div>
+          <p className="text-[10px] text-white/20">
+            {state.modelProgress < 50
+              ? 'Downloading ASR model (Whisper)…'
+              : 'Downloading translation model (NLLB-200)…'}
+          </p>
+        </div>
+      )}
 
       {/* Transcript panes */}
       <div className="relative z-10 flex-1 grid grid-cols-2 gap-3 px-4 pb-4 min-h-0 mt-2">

@@ -13,6 +13,9 @@ import {
 } from './audioCapture';
 import { createVAD, type VadHandle } from './vad';
 import { createSpeakerHeuristics, type SpeakerHeuristicsHandle } from './speakerHeuristics';
+import { loadModels as _loadModels, type ProgressCallback } from './modelManager';
+import { transcribe } from './asr';
+import { translate } from './translate';
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
 
@@ -188,6 +191,28 @@ export function useTranslatorSession() {
     [],
   );
 
+  /**
+   * Downloads and initialises ASR + translation models.
+   * Reports progress via MODEL_LOADING actions; calls MODEL_READY on success.
+   * Detects WebGPU and falls back to WASM automatically.
+   */
+  const downloadModel = useCallback(async () => {
+    dispatch({ type: 'MODEL_LOADING' });
+    try {
+      const onProgress: ProgressCallback = ({ phase, progress }) => {
+        // Map two phases (asr=0-50%, translation=50-100%) into a single bar
+        const overall =
+          phase === 'asr' ? progress / 2 : 50 + progress / 2;
+        dispatch({ type: 'MODEL_LOADING', payload: { progress: Math.round(overall) } });
+      };
+      await _loadModels(onProgress);
+      dispatch({ type: 'MODEL_READY' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      dispatch({ type: 'MODEL_ERROR', payload: `Failed to load models: ${msg}` });
+    }
+  }, []);
+
   // ── Mic lifecycle ───────────────────────────────────────────────────────────
 
   const micRequest = useCallback(() => dispatch({ type: 'MIC_REQUEST' }), []);
@@ -252,12 +277,89 @@ export function useTranslatorSession() {
             } satisfies Utterance,
           });
 
-          // Hand audio + metadata to the ASR pipeline (step 6 wires this ref)
+          // Hand audio to the ASR + translate pipeline
           speechEndCallbackRef.current(audio, utteranceId, forcedSplit);
         },
       });
 
       vadRef.current = vad;
+
+      // ── Wire ASR + translate pipeline into speechEndCallbackRef ──────────
+      // Called by onSpeechEnd above for each finalised utterance.
+      speechEndCallbackRef.current = async (audio, utteranceId, _forcedSplit) => {
+        const { leftLang, rightLang, utterances } = stateRef.current;
+
+        // Retrieve the partial utterance to get its speakerSide
+        const partial = utterances.find((u) => u.id === utteranceId);
+        const speakerSide = partial?.speakerSide ?? 'left';
+        const srcLang = speakerSide === 'right' ? rightLang.code : leftLang.code;
+        const tgtLang = speakerSide === 'right' ? leftLang.code : rightLang.code;
+
+        try {
+          // ── 1. ASR — transcribe with streaming partial updates ──────────
+          const { text: sourceText, confidence: asrConf } = await transcribe(
+            audio,
+            srcLang,
+            {
+              onPartial: (partial) => {
+                // Update the existing partial entry with the growing transcript
+                dispatch({
+                  type: 'ADD_PARTIAL_TRANSCRIPT',
+                  payload: {
+                    id: utteranceId,
+                    timestampStart: partial?.timestampStart ?? Date.now(),
+                    speakerSide,
+                    sourceLang: srcLang,
+                    targetLang: tgtLang,
+                    sourceText: partial,
+                    confidence: partial?.confidence,
+                    isPartial: true,
+                  } satisfies Utterance,
+                });
+              },
+            },
+          );
+
+          // ── 2. Translate ─────────────────────────────────────────────────
+          const translatedText = await translate(sourceText, srcLang, tgtLang);
+
+          // ── 3. Finalize utterance ────────────────────────────────────────
+          dispatch({
+            type: 'FINALIZE_UTTERANCE',
+            payload: {
+              id: utteranceId,
+              timestampStart: partial?.timestampStart ?? Date.now(),
+              timestampEnd: Date.now(),
+              speakerSide,
+              sourceLang: srcLang,
+              targetLang: tgtLang,
+              sourceText,
+              translatedText,
+              confidence: asrConf,
+              isPartial: false,
+            } satisfies Utterance,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('[session] ASR/translate error:', msg);
+
+          // Finalize with an error placeholder so the UI isn't stuck
+          dispatch({
+            type: 'FINALIZE_UTTERANCE',
+            payload: {
+              id: utteranceId,
+              timestampStart: partial?.timestampStart ?? Date.now(),
+              timestampEnd: Date.now(),
+              speakerSide,
+              sourceLang: srcLang,
+              targetLang: tgtLang,
+              sourceText: '[Transcription error]',
+              confidence: 0,
+              isPartial: false,
+            } satisfies Utterance,
+          });
+        }
+      };
 
       // Wire VAD into the PCM stream
       pcmListenerRef.current = (samples: Float32Array) => {
@@ -298,8 +400,9 @@ export function useTranslatorSession() {
     speakerRef.current?.reset();
     speakerRef.current = null;
 
-    // Reset PCM listener to no-op
+    // Reset PCM listener and speech-end callback to no-ops
     pcmListenerRef.current = () => undefined;
+    speechEndCallbackRef.current = () => undefined;
 
     dispatch({ type: 'STOP_LISTENING' });
   }, []);
@@ -332,6 +435,7 @@ export function useTranslatorSession() {
     modelLoading,
     modelReady,
     modelError,
+    downloadModel,
     // Mic
     micRequest,
     micGranted,
