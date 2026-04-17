@@ -16,7 +16,7 @@
  *  12. Direction logic — speakerSide drives language pair (reducer slice)
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
 // ── Pure logic modules ─────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ import { BigMicButton } from '../../features/translation-feature/components/BigM
 import { SettingsSheet } from '../../features/translation-feature/components/SettingsSheet';
 
 // ── Types ──────────────────────────────────────────────────────────────────
-import type { Utterance, Language } from '../../lib/types';
+import type { Utterance } from '../../lib/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
