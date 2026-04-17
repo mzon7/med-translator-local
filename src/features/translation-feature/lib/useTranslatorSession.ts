@@ -12,6 +12,7 @@ import {
   type AudioCaptureCallbacks,
 } from './audioCapture';
 import { createVAD, type VadHandle } from './vad';
+import { createSpeakerHeuristics, type SpeakerHeuristicsHandle } from './speakerHeuristics';
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
 
@@ -130,6 +131,9 @@ export function useTranslatorSession() {
   /** Active VAD instance */
   const vadRef = useRef<VadHandle | null>(null);
 
+  /** Active speaker-heuristics instance */
+  const speakerRef = useRef<SpeakerHeuristicsHandle | null>(null);
+
   /**
    * Raw PCM listener registered with audioCapture.
    * Replaced with vad.processChunk on start, reset to no-op on stop.
@@ -157,6 +161,8 @@ export function useTranslatorSession() {
       captureRef.current = null;
       vadRef.current?.reset();
       vadRef.current = null;
+      speakerRef.current?.reset();
+      speakerRef.current = null;
       pcmListenerRef.current = () => undefined;
     };
   }, []);
@@ -213,33 +219,40 @@ export function useTranslatorSession() {
   const _doStartCapture = useCallback(async () => {
     dispatch({ type: 'MIC_REQUEST' });
     try {
-      // Build the VAD — callbacks close over dispatch and stateRef
+      // Initialise speaker heuristics for this session
+      const speaker = createSpeakerHeuristics();
+      speakerRef.current = speaker;
+
+      // Build the VAD — callbacks close over dispatch, stateRef, and speaker
       const vad = createVAD({
         onSpeechStart: () => {
-          // Optional: could update UI to show "speech detected" indicator
+          // Could drive a "speech detected" pulse on the mic button in future
         },
 
         onSpeechEnd: (audio, forcedSplit) => {
           const { leftLang, rightLang } = stateRef.current;
           const utteranceId = crypto.randomUUID();
 
-          // Show a placeholder partial utterance immediately in the transcript
-          // (speaker side will be assigned by speakerHeuristics in step 5;
-          //  sourceText will be replaced by ASR output)
+          // Assign speaker side synchronously from acoustic features
+          const { side, confidence } = speaker.assign(audio);
+
+          // Dispatch utterance immediately with the assigned speaker side.
+          // sourceText is a placeholder until ASR fills it in (step 6+).
           dispatch({
             type: 'ADD_PARTIAL_TRANSCRIPT',
             payload: {
               id: utteranceId,
               timestampStart: Date.now(),
-              speakerSide: 'unknown',
+              speakerSide: side,
               sourceLang: leftLang.code,
               targetLang: rightLang.code,
               sourceText: '…',
+              confidence,
               isPartial: true,
             } satisfies Utterance,
           });
 
-          // Hand audio to the ASR pipeline (step 5 wires this ref)
+          // Hand audio + metadata to the ASR pipeline (step 6 wires this ref)
           speechEndCallbackRef.current(audio, utteranceId, forcedSplit);
         },
       });
@@ -281,6 +294,9 @@ export function useTranslatorSession() {
 
     vadRef.current?.reset();
     vadRef.current = null;
+
+    speakerRef.current?.reset();
+    speakerRef.current = null;
 
     // Reset PCM listener to no-op
     pcmListenerRef.current = () => undefined;
