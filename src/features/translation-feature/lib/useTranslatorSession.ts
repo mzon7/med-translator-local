@@ -23,6 +23,13 @@ import { loadModels as _loadModels, type ProgressCallback } from './modelManager
 import { transcribe } from './asr';
 import { translate } from './translate';
 import { sanitizeForLog, assertLocalOnly } from './privacyBoundary';
+import {
+  storePitchForSpeaker,
+  speakTranslation,
+  cancelSpeech,
+  resetPitchProfiles,
+  isVoicePitchEnabled,
+} from '../../voice-pitch-copy/lib/voiceSynth';
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
 
@@ -336,6 +343,9 @@ export function useTranslatorSession() {
       const speaker = createSpeakerHeuristics();
       speakerRef.current = speaker;
 
+      // Reset voice pitch profiles for the new session
+      resetPitchProfiles();
+
       // Build the VAD — callbacks close over dispatch, stateRef, and speaker
       const vad = createVAD({
         onSpeechStart: () => {
@@ -348,6 +358,9 @@ export function useTranslatorSession() {
 
           // Assign speaker side synchronously from acoustic features
           const { side, confidence } = speaker.assign(audio);
+
+          // Analyse and store pitch for voice pitch copy (sync, before ASR)
+          storePitchForSpeaker(side, audio);
 
           // Dispatch utterance immediately with the assigned speaker side.
           // sourceText is a placeholder until ASR fills it in (step 6+).
@@ -428,6 +441,11 @@ export function useTranslatorSession() {
               isPartial: false,
             } satisfies Utterance,
           });
+
+          // ── 4. Speak translation with matched voice pitch ─────────────────
+          if (translatedText && isVoicePitchEnabled()) {
+            speakTranslation(translatedText, tgtLang, speakerSide);
+          }
         } catch (err) {
           // sanitizeForLog strips non-ASCII to avoid leaking transcript text
           const msg = sanitizeForLog(err);
@@ -486,6 +504,9 @@ export function useTranslatorSession() {
     // Reset PCM listener and speech-end callback to no-ops
     pcmListenerRef.current = () => undefined;
     speechEndCallbackRef.current = () => undefined;
+
+    // Stop any TTS that may still be playing
+    cancelSpeech();
 
     dispatch({ type: 'STOP_LISTENING' });
   }, []);
@@ -565,6 +586,10 @@ export function useTranslatorSession() {
             isPartial: false,
           } satisfies Utterance,
         });
+
+        if (translatedText && isVoicePitchEnabled()) {
+          speakTranslation(translatedText, tgtLang, speakerSide);
+        }
       } catch (err) {
         const msg = sanitizeForLog(err);
         console.error('[session] retry ASR/translate error:', msg);

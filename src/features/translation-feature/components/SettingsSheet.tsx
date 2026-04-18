@@ -1,10 +1,13 @@
 import { useEffect, useRef } from 'react';
+import { VoicePitchToggle } from '../../voice-pitch-copy/components/VoicePitchToggle';
 
 interface SettingsSheetProps {
   open: boolean;
   onClose: () => void;
   hasTranscripts: boolean;
   onClearTranscripts: () => void;
+  voicePitchEnabled: boolean;
+  onToggleVoicePitch: () => void;
 }
 
 export function SettingsSheet({
@@ -12,6 +15,8 @@ export function SettingsSheet({
   onClose,
   hasTranscripts,
   onClearTranscripts,
+  voicePitchEnabled,
+  onToggleVoicePitch,
 }: SettingsSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
 
@@ -124,6 +129,21 @@ export function SettingsSheet({
             </button>
             <p className="text-[10px] text-white/20 leading-relaxed">
               Removes all transcripts from this session. Nothing is stored on a server.
+            </p>
+          </section>
+
+          {/* Audio output section */}
+          <section className="space-y-3">
+            <p className="text-[10px] text-white/25 uppercase tracking-widest font-medium">
+              Audio Output
+            </p>
+            <VoicePitchToggle
+              enabled={voicePitchEnabled}
+              onToggle={onToggleVoicePitch}
+            />
+            <p className="text-[10px] text-white/20 leading-relaxed">
+              Uses the browser's built-in speech synthesis. Pitch is automatically
+              calibrated from each speaker's voice and applied to TTS output.
             </p>
           </section>
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslatorSession } from '../features/translation-feature/lib/useTranslatorSession';
+import { usePitchCopy } from '../features/voice-pitch-copy/lib/usePitchCopy';
 import { LanguagePicker } from '../features/translation-feature/components/LanguagePicker';
 import { BigMicButton } from '../features/translation-feature/components/BigMicButton';
 import { TranscriptPane } from '../features/translation-feature/components/TranscriptPane';
@@ -9,6 +10,8 @@ import { SettingsSheet } from '../features/translation-feature/components/Settin
 export default function AppPage() {
   const { state, setLang, toggleSession, downloadModel, retryMic, retryUtterance, clearTranscripts } =
     useTranslatorSession();
+
+  const { enabled: voicePitchEnabled, toggle: toggleVoicePitch } = usePitchCopy();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -74,6 +77,8 @@ export default function AppPage() {
         onClose={() => setSettingsOpen(false)}
         hasTranscripts={state.utterances.length > 0}
         onClearTranscripts={clearTranscripts}
+        voicePitchEnabled={voicePitchEnabled}
+        onToggleVoicePitch={toggleVoicePitch}
       />
 
       {/* Language pickers */}
