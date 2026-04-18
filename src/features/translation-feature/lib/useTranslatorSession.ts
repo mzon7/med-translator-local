@@ -360,7 +360,7 @@ export function useTranslatorSession() {
           const { side, confidence } = speaker.assign(audio);
 
           // Analyse and store pitch for voice pitch copy (sync, before ASR)
-          storePitchForSpeaker(side, audio);
+          if (side !== 'unknown') storePitchForSpeaker(side, audio);
 
           // Dispatch utterance immediately with the assigned speaker side.
           // sourceText is a placeholder until ASR fills it in (step 6+).
@@ -443,7 +443,7 @@ export function useTranslatorSession() {
           });
 
           // ── 4. Speak translation with matched voice pitch ─────────────────
-          if (translatedText && isVoicePitchEnabled()) {
+          if (translatedText && isVoicePitchEnabled() && speakerSide !== 'unknown') {
             speakTranslation(translatedText, tgtLang, speakerSide);
           }
         } catch (err) {
@@ -587,7 +587,7 @@ export function useTranslatorSession() {
           } satisfies Utterance,
         });
 
-        if (translatedText && isVoicePitchEnabled()) {
+        if (translatedText && isVoicePitchEnabled() && speakerSide !== 'unknown') {
           speakTranslation(translatedText, tgtLang, speakerSide);
         }
       } catch (err) {
