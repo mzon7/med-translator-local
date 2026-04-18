@@ -490,6 +490,8 @@ describe('SettingsSheet', () => {
         onClose={vi.fn()}
         hasTranscripts={true}
         onClearTranscripts={vi.fn()}
+        voicePitchEnabled={false}
+        onToggleVoicePitch={vi.fn()}
       />,
     );
     // Sheet is in the DOM but translated off-screen (translate-x-full)
@@ -504,6 +506,8 @@ describe('SettingsSheet', () => {
         onClose={vi.fn()}
         hasTranscripts={true}
         onClearTranscripts={vi.fn()}
+        voicePitchEnabled={false}
+        onToggleVoicePitch={vi.fn()}
       />,
     );
     expect(screen.getByText(/Clear conversation/i)).toBeInTheDocument();
@@ -516,6 +520,8 @@ describe('SettingsSheet', () => {
         onClose={vi.fn()}
         hasTranscripts={false}
         onClearTranscripts={vi.fn()}
+        voicePitchEnabled={false}
+        onToggleVoicePitch={vi.fn()}
       />,
     );
     const clearBtn = screen.getByRole('button', { name: /Clear conversation/i });
@@ -531,6 +537,8 @@ describe('SettingsSheet', () => {
         onClose={onClose}
         hasTranscripts={true}
         onClearTranscripts={onClear}
+        voicePitchEnabled={false}
+        onToggleVoicePitch={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /Clear conversation/i }));
@@ -546,6 +554,8 @@ describe('SettingsSheet', () => {
         onClose={onClose}
         hasTranscripts={false}
         onClearTranscripts={vi.fn()}
+        voicePitchEnabled={false}
+        onToggleVoicePitch={vi.fn()}
       />,
     );
     fireEvent.keyDown(document, { key: 'Escape' });
