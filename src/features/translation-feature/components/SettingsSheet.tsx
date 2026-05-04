@@ -155,7 +155,7 @@ export function SettingsSheet({
             <div className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2.5 space-y-1.5">
               <div className="flex items-center gap-2">
                 <svg
-                  className="w-3 h-3 text-[#d5d728]/60 shrink-0"
+                  className="w-3 h-3 text-[#10b981]/60 shrink-0"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={2}

@@ -39,15 +39,15 @@ export function LanguagePicker({ side, value, onChange, disabled }: LanguagePick
           'transition-all duration-200',
           disabled
             ? 'opacity-40 cursor-not-allowed'
-            : 'hover:bg-white/10 hover:border-[#d5d728]/40 cursor-pointer',
-          open ? 'border-[#d5d728]/60 bg-white/10' : '',
+            : 'hover:bg-white/10 hover:border-[#10b981]/40 cursor-pointer',
+          open ? 'border-[#10b981]/60 bg-white/10' : '',
         ].join(' ')}
         aria-label={`Select ${side} language`}
         aria-expanded={open}
       >
         {/* Globe icon */}
         <svg
-          className="w-4 h-4 text-[#d5d728] shrink-0"
+          className="w-4 h-4 text-[#10b981] shrink-0"
           fill="none"
           stroke="currentColor"
           strokeWidth={1.5}
@@ -89,13 +89,13 @@ export function LanguagePicker({ side, value, onChange, disabled }: LanguagePick
                 'w-full text-left px-4 py-2.5 text-sm transition-colors duration-150',
                 'flex items-center gap-2',
                 lang.code === value.code
-                  ? 'text-[#d5d728] bg-[#d5d728]/10'
+                  ? 'text-[#10b981] bg-[#10b981]/10'
                   : 'text-white/80 hover:text-white hover:bg-white/5',
               ].join(' ')}
             >
               {lang.code === value.code && (
                 <svg
-                  className="w-3.5 h-3.5 text-[#d5d728] shrink-0"
+                  className="w-3.5 h-3.5 text-[#10b981] shrink-0"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={2.5}

@@ -16,7 +16,7 @@ export function StatusBar({ sessionStatus, micStatus, modelStatus, error }: Stat
 
   const dotColor = (() => {
     if (isError) return 'bg-red-500';
-    if (isListening) return 'bg-[#d5d728] animate-pulse';
+    if (isListening) return 'bg-[#10b981] animate-pulse';
     if (isProcessing) return 'bg-blue-400 animate-pulse';
     if (isRequestingMic) return 'bg-yellow-400 animate-pulse';
     return 'bg-white/20';

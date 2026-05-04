@@ -17,7 +17,7 @@ export function VoicePitchToggle({ enabled, onToggle }: VoicePitchToggleProps) {
         {/* Speaker-wave icon */}
         <svg
           className={`w-4 h-4 shrink-0 transition-colors duration-150 ${
-            enabled ? 'text-[#d5d728]' : 'text-white/30'
+            enabled ? 'text-[#10b981]' : 'text-white/30'
           }`}
           fill="none"
           stroke="currentColor"
@@ -47,8 +47,8 @@ export function VoicePitchToggle({ enabled, onToggle }: VoicePitchToggleProps) {
         aria-label="Toggle voice pitch copy"
         className={[
           'relative shrink-0 inline-flex h-5 w-9 cursor-pointer rounded-full border-2 border-transparent',
-          'transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d5d728]/50',
-          enabled ? 'bg-[#d5d728]' : 'bg-white/10',
+          'transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]/50',
+          enabled ? 'bg-[#10b981]' : 'bg-white/10',
         ].join(' ')}
       >
         <span

@@ -22,15 +22,15 @@ export default function AppPage() {
     <div className="min-h-screen bg-black flex flex-col overflow-hidden">
       {/* Ambient glow */}
       <div className="pointer-events-none fixed inset-0 z-0" aria-hidden="true">
-        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] rounded-full bg-[#d5d728]/5 blur-[120px]" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#d5d728]/4 blur-[100px]" />
+        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] rounded-full bg-[#10b981]/6 blur-[120px]" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#0ea5e9]/5 blur-[100px]" />
       </div>
 
       {/* Header */}
       <header className="relative z-10 flex items-center justify-between px-6 pt-6 pb-2">
         <div className="flex items-center gap-2">
           <svg
-            className="w-6 h-6 text-[#d5d728]"
+            className="w-6 h-6 text-[#10b981]"
             fill="none"
             stroke="currentColor"
             strokeWidth={1.5}
@@ -149,7 +149,7 @@ export default function AppPage() {
           </div>
           <button
             onClick={retryMic}
-            className="flex items-center gap-1.5 text-xs font-semibold text-[#d5d728] hover:text-[#d5d728]/80 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-semibold text-[#10b981] hover:text-[#10b981]/80 transition-colors"
           >
             <svg
               className="w-3.5 h-3.5"
@@ -188,7 +188,7 @@ export default function AppPage() {
                 'border transition-all duration-200',
                 state.modelStatus === 'error'
                   ? 'border-red-500/50 text-red-400 hover:bg-red-500/10'
-                  : 'border-[#d5d728]/60 text-[#d5d728] hover:bg-[#d5d728]/10 active:scale-95',
+                  : 'border-[#10b981]/60 text-[#10b981] hover:bg-[#10b981]/10 active:scale-95',
               ].join(' ')}
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -221,7 +221,7 @@ export default function AppPage() {
             <span className="text-[10px] text-white/40 uppercase tracking-widest">
               {state.modelFromCache === true ? 'Loading from cache' : 'Downloading model'}
             </span>
-            <span className="text-[10px] text-[#d5d728]/60 font-mono">
+            <span className="text-[10px] text-[#10b981]/60 font-mono">
               {state.modelProgress}%
             </span>
           </div>
@@ -229,7 +229,7 @@ export default function AppPage() {
             <div
               className={[
                 'h-full rounded-full transition-all duration-500',
-                state.modelFromCache === true ? 'bg-white/40' : 'bg-[#d5d728]',
+                state.modelFromCache === true ? 'bg-white/40' : 'bg-[#10b981]',
               ].join(' ')}
               style={{ width: `${state.modelProgress}%` }}
             />

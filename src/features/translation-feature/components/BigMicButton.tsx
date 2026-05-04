@@ -95,16 +95,16 @@ export function BigMicButton({
   })();
 
   const buttonBg = isActive
-    ? 'bg-[#d5d728]'
+    ? 'bg-[#10b981]'
     : isDisabled
     ? 'bg-white/5'
     : 'bg-white/10 hover:bg-white/15';
 
   const borderClass = isActive
-    ? 'border-[#d5d728]'
+    ? 'border-[#10b981]'
     : isDisabled
     ? 'border-white/10'
-    : 'border-white/20 hover:border-[#d5d728]/60';
+    : 'border-white/20 hover:border-[#10b981]/60';
 
   const showSpinner = isRequestingMic || isProcessing;
 
@@ -114,7 +114,7 @@ export function BigMicButton({
       {isModelLoading && (
         <div className="w-40 h-1 rounded-full bg-white/10 overflow-hidden">
           <div
-            className="h-full bg-[#d5d728] rounded-full transition-all duration-300"
+            className="h-full bg-[#10b981] rounded-full transition-all duration-300"
             style={{ width: `${modelProgress}%` }}
           />
         </div>
@@ -123,7 +123,7 @@ export function BigMicButton({
       {/* Ring + button */}
       <div className="relative flex items-center justify-center">
         {isListening && (
-          <span className="animate-ping absolute inset-0 rounded-full bg-[#d5d728] opacity-20" />
+          <span className="animate-ping absolute inset-0 rounded-full bg-[#10b981] opacity-20" />
         )}
 
         <button
@@ -135,7 +135,7 @@ export function BigMicButton({
             'transition-all duration-300 shadow-lg',
             buttonBg,
             borderClass,
-            isActive ? 'shadow-[#d5d728]/30 shadow-xl scale-105' : '',
+            isActive ? 'shadow-[#10b981]/30 shadow-xl scale-105' : '',
             isDisabled
               ? 'cursor-not-allowed opacity-50'
               : 'cursor-pointer active:scale-95',
@@ -158,7 +158,7 @@ export function BigMicButton({
           sessionStatus === 'error' || modelStatus === 'error' || micStatus === 'denied'
             ? 'text-red-400'
             : isListening
-            ? 'text-[#d5d728]'
+            ? 'text-[#10b981]'
             : 'text-white/50',
         ].join(' ')}
       >

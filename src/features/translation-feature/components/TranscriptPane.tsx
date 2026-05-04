@@ -61,7 +61,7 @@ function UncertainBadge() {
 
 function TranslationLabel() {
   return (
-    <span className="text-[9px] text-[#d5d728]/40 uppercase tracking-widest font-medium">
+    <span className="text-[9px] text-[#0ea5e9]/50 uppercase tracking-widest font-medium">
       Translation
     </span>
   );
@@ -107,7 +107,7 @@ export function TranscriptPane({ side, language, utterances, onRetryUtterance }:
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5">
         <div
-          className={`w-2 h-2 rounded-full ${side === 'left' ? 'bg-[#d5d728]' : 'bg-white/40'}`}
+          className={`w-2 h-2 rounded-full ${side === 'left' ? 'bg-[#10b981]' : 'bg-[#0ea5e9]'}`}
         />
         <span className="text-xs font-medium text-white/40 uppercase tracking-widest">
           {side === 'left' ? 'Speaker 1' : 'Speaker 2'}
@@ -147,7 +147,7 @@ export function TranscriptPane({ side, language, utterances, onRetryUtterance }:
                 <div
                   key={utterance.id}
                   className={[
-                    'space-y-1 transition-opacity duration-200 pl-3 border-l border-[#d5d728]/20',
+                    'space-y-1 transition-opacity duration-200 pl-3 border-l border-[#0ea5e9]/20',
                     utterance.isPartial ? 'opacity-40' : 'opacity-100',
                   ].join(' ')}
                 >
@@ -200,7 +200,7 @@ export function TranscriptPane({ side, language, utterances, onRetryUtterance }:
                   {onRetryUtterance && (
                     <button
                       onClick={() => onRetryUtterance(utterance.id)}
-                      className="flex items-center gap-1.5 text-[10px] text-[#d5d728]/60 hover:text-[#d5d728] transition-colors"
+                      className="flex items-center gap-1.5 text-[10px] text-[#10b981]/60 hover:text-[#10b981] transition-colors"
                     >
                       <svg
                         className="w-3 h-3"
@@ -257,7 +257,7 @@ export function TranscriptPane({ side, language, utterances, onRetryUtterance }:
                     <div className="flex items-center gap-1">
                       <div className="h-px flex-1 bg-white/5 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-[#d5d728]/30 rounded-full"
+                          className="h-full bg-[#10b981]/30 rounded-full"
                           style={{ width: `${Math.round(utterance.confidence * 100)}%` }}
                         />
                       </div>
